@@ -94,7 +94,7 @@ float gen_vehicle(){
 
 	sprintf(new_vehicle->fifo, "%s%d", "fifo", new_vehicle->id);
 
-	float park_time = (rand() % 10) + 1 * clock_ticks;
+	float park_time = ((rand() % 10) + 1) * clock_ticks;
 	new_vehicle->p_time = park_time; 
 
 	if(pthread_create(&genV, NULL, process_V, new_vehicle) != 0)
