@@ -70,8 +70,8 @@ void* process_V(void* arg){
 }
 
 float gen_vehicle(){
-	Vehicle new_vehicle;
-	new_vehicle.id = id;
+	Vehicle *new_vehicle = (Vehicle*)malloc(sizeof(Vehicle));;
+	new_vehicle->id = id;
 	id++;
 	int r = rand() % 4;
 
@@ -79,25 +79,25 @@ float gen_vehicle(){
 
 	switch(r){
 		case 0:
-			new_vehicle.dir = NORTH;
+			new_vehicle->dir = NORTH;
 			break;
 		case 1:
-			new_vehicle.dir = SOUTH;
+			new_vehicle->dir = SOUTH;
 			break;
 		case 2:
-			new_vehicle.dir = EAST;
+			new_vehicle->dir = EAST;
 			break;
 		case 3:
-			new_vehicle.dir = WEST;
+			new_vehicle->dir = WEST;
 			break;
 	}
 
-	sprintf(new_vehicle.fifo, "%s%d", "fifo", new_vehicle.id);
+	sprintf(new_vehicle->fifo, "%s%d", "fifo", new_vehicle->id);
 
 	float park_time = (rand() % 10) + 1 * clock_ticks;
-	new_vehicle.p_time = park_time; 
+	new_vehicle->p_time = park_time; 
 
-	if(pthread_create(&genV, NULL, process_V, &new_vehicle) != 0)
+	if(pthread_create(&genV, NULL, process_V, new_vehicle) != 0)
 		perror("Error creating process_v thread...\n");
 
 	int x = rand() % 10;

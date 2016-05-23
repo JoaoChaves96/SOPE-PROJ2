@@ -51,14 +51,17 @@ void *v_controller(void* arg){
 
 	//locks all other threads and controls number of available spaces in the park
 	pthread_mutex_lock(&mutex);
+	printf("\n%d\n", unavailable);
 
-	if (unavailable < capacity && parkstate == PARK_OPEN){
+	if (unavailable < capacity && parkstate != PARK_CLOSED){
 		unavailable++;
 		pthread_mutex_unlock(&mutex);
 		printf("\nNew vehicle in the park with id %d and parking time %d\n", vehicle.id, (int)vehicle.p_time);
 		parkstate = PARKING_VEHICLE;
 		usleep(vehicle.p_time * 1000);
 		unavailable--;
+		printf("the vehicle  with id %d left the park...\n", vehicle.id);
+		parkstate = 5;
 	}
 	else if(state == PARK_CLOSED){
 		pthread_mutex_unlock(&mutex);
@@ -67,8 +70,8 @@ void *v_controller(void* arg){
 	}
 	else{
 		pthread_mutex_unlock(&mutex);
-		printf("The park is full!! \n");
 		parkstate = PARK_FULL;
+		printf("The park is full!! \n");
 	}
 
 	write(fd, &parkstate, sizeof(int));	
