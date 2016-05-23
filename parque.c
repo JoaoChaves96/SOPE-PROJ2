@@ -52,9 +52,10 @@ void *v_controller(void* arg){
 	//locks all other threads and controls number of available spaces in the park
 	pthread_mutex_lock(&mutex);
 
-	if (unavailable < capacity && state == PARK_OPEN){
+	if (unavailable < capacity && parkstate == PARK_OPEN){
 		unavailable++;
 		pthread_mutex_unlock(&mutex);
+		printf("\nNew vehicle in the park with id %d and parking time %d\n", vehicle.id, (int)vehicle.p_time);
 		parkstate = PARKING_VEHICLE;
 		usleep(vehicle.p_time * 1000);
 		unavailable--;
@@ -66,6 +67,7 @@ void *v_controller(void* arg){
 	}
 	else{
 		pthread_mutex_unlock(&mutex);
+		printf("The park is full!! \n");
 		parkstate = PARK_FULL;
 	}
 
@@ -87,14 +89,16 @@ void* north_entry(void* arg){
 	if ((fd = open("fifoN", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
-	//avoids busy wainting
+	//avoids busy waiting
 	open("fifoN", O_WRONLY);
 	printf("Fifo opened\n");
 
-	while(0){
+	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
-		if (vehicle.id == CONTROL_VEHICLE_ID)
+		if (vehicle.id == CONTROL_VEHICLE_ID){
+			printf("vehicle received...\n");
 			break;
+		}
 		else if (read_value > 0){
 			printf("North park vehicle with ID = %d", vehicle.id);
 			if (pthread_create(&tNorth, NULL, v_controller, &vehicle) != 0)
@@ -104,6 +108,8 @@ void* north_entry(void* arg){
 	}
 
 	close(fd);
+
+	//unlink("fifoN");
 
 	return ret;
 }
@@ -121,13 +127,16 @@ void* south_entry(void* arg){
 	if ((fd = open("fifoS", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
+	//avoids busy waiting
 	open("fifoS", O_WRONLY);
 	printf("Fifo opened\n");
 
-	while(0){
+	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
-		if (vehicle.id == CONTROL_VEHICLE_ID)
+		if (vehicle.id == CONTROL_VEHICLE_ID){
+			printf("vehicle received...\n");
 			break;
+		}
 		else if (read_value > 0){
 			printf("South park vehicle with ID = %d", vehicle.id);
 			if (pthread_create(&tSouth, NULL, v_controller, &vehicle) != 0)
@@ -137,6 +146,8 @@ void* south_entry(void* arg){
 	}
 
 	close(fd);
+
+	//unlink("fifoS");
 
 	return ret;
 }
@@ -154,13 +165,16 @@ void* east_entry(void* arg){
 	if ((fd = open("fifoE", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
+	//avoids busy waiting
 	open("fifoE", O_WRONLY);
 	printf("Fifo opened\n");
 
-	while(0){
+	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
-		if (vehicle.id == CONTROL_VEHICLE_ID)
+		if (vehicle.id == CONTROL_VEHICLE_ID){
+			printf("vehicle received...\n");
 			break;
+		}
 		else if (read_value > 0){
 			printf("East park vehicle with ID = %d", vehicle.id);
 			if (pthread_create(&tEast, NULL, v_controller, &vehicle) != 0)
@@ -170,6 +184,8 @@ void* east_entry(void* arg){
 	}
 
 	close(fd);
+
+	//unlink("fifoE");
 
 	return ret;
 }
@@ -187,13 +203,16 @@ void* west_entry(void* arg){
 	if ((fd = open("fifoW", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
+	//avoids busy waiting
 	open("fifoW", O_WRONLY);
 	printf("Fifo opened\n");
 
-	while(0){
+	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
-		if (vehicle.id == CONTROL_VEHICLE_ID)
+		if (vehicle.id == CONTROL_VEHICLE_ID){
+			printf("vehicle received...\n");
 			break;
+		}
 		else if (read_value > 0){
 			printf("West park vehicle with ID = %d", vehicle.id);
 			if (pthread_create(&tWest, NULL, v_controller, &vehicle) != 0)
@@ -203,6 +222,8 @@ void* west_entry(void* arg){
 	}
 
 	close(fd);
+
+	//unlink("fifoW");
 
 	return ret;
 }
@@ -217,31 +238,33 @@ void close_park(){
 	control_vehicle.p_time = 0;
 	strcpy(control_vehicle.fifo, "closed");
 
-	int fifoNorth = open("fifoN", O_WRONLY | O_NONBLOCK);
+	//printf("\n%d   %d   %s\n", control_vehicle.id, control_vehicle.p_time, control_vehicle.fifo);
+
+	int fifoNorth = open("fifoN", O_WRONLY);
 	if (fifoNorth < 0)
 		perror("Error opening north fifo for writing...\n");
-	int fifoSouth = open("fifoS", O_WRONLY | O_NONBLOCK);
+	int fifoSouth = open("fifoS", O_WRONLY);
 	if (fifoSouth < 0)
 		perror("Error opening south fifo for writing...\n");
-	int fifoWest = open("fifoW", O_WRONLY | O_NONBLOCK);
+	int fifoWest = open("fifoW", O_WRONLY);
 	if (fifoWest < 0)
 		perror("Error opening west fifo for writing...\n");
-	int fifoEast = open("fifoE", O_WRONLY | O_NONBLOCK);
+	int fifoEast = open("fifoE", O_WRONLY);
 	if (fifoEast < 0)
 		perror("Error opening east fifo for writing...\n");
-
-	printf("\n2\n");
 
 	write(fifoNorth, &control_vehicle, sizeof(Vehicle));
 	write(fifoSouth, &control_vehicle, sizeof(Vehicle));
 	write(fifoWest, &control_vehicle, sizeof(Vehicle));
 	write(fifoEast, &control_vehicle, sizeof(Vehicle));
-	printf("\n3\n");
+	//printf("\n%d   %d   %s\n", control_vehicle.id, (int)control_vehicle.p_time, control_vehicle.fifo);
+
 
 	close(fifoNorth);
 	close(fifoSouth);
 	close(fifoEast);
 	close(fifoWest);
+
 }
 
 int main(int argc, char* argv[]){
