@@ -55,7 +55,8 @@ void* process_V(void* arg){
 			break;
 	}
 
-	mkfifo(vehicle.fifo, 0660);
+	if (mkfifo(vehicle.fifo, 0660) != 0)
+		perror("Error making fifo\n");
 
 	if (fdWrite != -1){
 		write(fdWrite, &vehicle, sizeof(Vehicle));
@@ -70,7 +71,7 @@ void* process_V(void* arg){
 }
 
 float gen_vehicle(){
-	Vehicle *new_vehicle = (Vehicle*)malloc(sizeof(Vehicle));;
+	Vehicle *new_vehicle = (Vehicle*)malloc(sizeof(Vehicle));
 	new_vehicle->id = id;
 	id++;
 	int r = rand() % 4;
