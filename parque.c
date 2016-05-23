@@ -315,6 +315,11 @@ int main(int argc, char* argv[]){
 	printf("Waiting for all the vehicles to leave the park...\n");	
 	while(unavailable != 0){}
 
+	unlink("fifoN");
+	unlink("fifoS");
+	unlink("fifoW");
+	unlink("fifoE");
+
 	printf("\nThe park is now empty.\n");
 	
 	pthread_mutex_destroy(&mutex);
