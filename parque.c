@@ -20,18 +20,20 @@
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_f = PTHREAD_MUTEX_INITIALIZER;
 
 //number of park spaces of the park
 int capacity;
 
 //park's state(0 if open, 1 if closed, 2 if full)
 int state;
-int parkstate;
 
 //space of the park that is unavailable(= number of cars in the park)
 int unavailable;
 
 int open_time;
+
+int par_fd;
 
 typedef enum {NORTH, SOUTH, EAST, WEST} Direction;
 
@@ -39,47 +41,93 @@ typedef struct{
 	int id;
 	float p_time;
 	char fifo[FIFO_LENGTH];
+	float initTick;
+	int ticks;
 	Direction dir;
 } Vehicle;
+
+void write_log(Vehicle *vehicle, int state){
+	char line[200];
+	char obs[10];
+
+	switch(state){
+		case PARKING_VEHICLE:
+			strcpy(obs, "entrada");
+			break;
+		case LEAVING_VEHICLE:
+			strcpy(obs, "saida");
+			break;
+		case PARK_FULL:
+			strcpy(obs, "cheio");
+			break;
+		case PARK_CLOSED:
+			strcpy(obs, "fechado");
+			break;
+	}
+
+	if (state == LEAVING_VEHICLE)
+		sprintf(line, "%8d ; %4d ; %7d ; %7s\n", (int)(vehicle->initTick + vehicle->ticks), capacity - unavailable, vehicle->id, obs);
+	else
+		sprintf(line, "%8d ; %4d ; %7d ; %7s\n", (int)vehicle->initTick, capacity - unavailable, vehicle->id, obs);
+
+	write(par_fd, &line, strlen(line));
+	//printf("Escreveu no log\n");
+
+	strcpy(line, "");
+
+}
 
 void *v_controller(void* arg){
 	void* ret = NULL;
 	Vehicle vehicle = *(Vehicle*) arg;
 	int fd;
+	int parkstate;
 
 	fd = open(vehicle.fifo, O_WRONLY);
 
 	//locks all other threads and controls number of available spaces in the park
 	pthread_mutex_lock(&mutex);
-	printf("\n%d\n", unavailable);
+	//printf("\n%d\n", unavailable);
 
-	if (unavailable < capacity && parkstate != PARK_CLOSED){
-		parkstate = PARKING_VEHICLE;
+	if (unavailable < capacity && state != PARK_CLOSED){
+		
 		unavailable++;
+		parkstate = PARKING_VEHICLE;
+
 		write(fd, &parkstate, sizeof(int));
+
+		pthread_mutex_lock(&mutex_f);
+		write_log(&vehicle, PARKING_VEHICLE);
+		pthread_mutex_unlock(&mutex_f);
+
+
 		pthread_mutex_unlock(&mutex);
-		printf("\nNew vehicle in the park with id %d and parking time %d\n", vehicle.id, (int)vehicle.p_time);
+		//printf("\nNew vehicle in the park with id %d and parking time %d\n", vehicle.id, (int)vehicle.p_time);
 		usleep(vehicle.p_time * 1000);
+		//printf("the vehicle  with id %d left the park...\n", vehicle.id);
 		unavailable--;
-		printf("the vehicle  with id %d left the park...\n", vehicle.id);
 		parkstate = LEAVING_VEHICLE;
-		write(fd, &parkstate, sizeof(int));
+		//write(fd, &parkstate, sizeof(int));
 	}
 	else if(state == PARK_CLOSED){
 		pthread_mutex_unlock(&mutex);
-		printf("Cannot add vehicle! The park is closed\n\n");
+		//printf("Cannot add vehicle! The park is closed\n\n");
 		parkstate = PARK_CLOSED;
-		write(fd, &parkstate, sizeof(int));
+		//write(fd, &parkstate, sizeof(int));
 	}
 	else{
 		pthread_mutex_unlock(&mutex);
 		parkstate = PARK_FULL;
-		write(fd, &parkstate, sizeof(int));
-		printf("The park is full!! \n");
+		//printf("The park is full!! \n");
+		//write(fd, &parkstate, sizeof(int));
 	}
 
-	//write(fd, &parkstate, sizeof(int));	
-
+	write(fd, &parkstate, sizeof(int));
+	
+	pthread_mutex_lock(&mutex_f);
+	write_log(&vehicle, parkstate);
+	pthread_mutex_unlock(&mutex_f);
+	close(fd);
 	return ret;
 }
 
@@ -92,22 +140,22 @@ void* north_entry(void* arg){
 
 	mkfifo("fifoN", 0660);
 
-	printf("Opening fifo...\n");
+	//printf("Opening fifo...\n");
 	if ((fd = open("fifoN", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
 	//avoids busy waiting
 	open("fifoN", O_WRONLY);
-	printf("Fifo opened\n");
+	//printf("Fifo opened\n");
 
 	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
 		if (vehicle.id == CONTROL_VEHICLE_ID){
-			printf("vehicle received...\n");
+			//printf("vehicle received...\n");
 			break;
 		}
 		else if (read_value > 0){
-			printf("North park vehicle with ID = %d", vehicle.id);
+			//printf("North park vehicle with ID = %d\n", vehicle.id);
 			if (pthread_create(&tNorth, NULL, v_controller, &vehicle) != 0)
 				perror("Error creating thread on North Pole of the park...\n\n");
 		}
@@ -116,7 +164,7 @@ void* north_entry(void* arg){
 
 	close(fd);
 
-	//unlink("fifoN");
+	unlink("fifoN");
 
 	return ret;
 }
@@ -130,22 +178,22 @@ void* south_entry(void* arg){
 
 	mkfifo("fifoS", 0660);
 
-	printf("Opening fifo...\n");
+	//printf("Opening fifo...\n");
 	if ((fd = open("fifoS", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
 	//avoids busy waiting
 	open("fifoS", O_WRONLY);
-	printf("Fifo opened\n");
+	//printf("Fifo opened\n");
 
 	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
 		if (vehicle.id == CONTROL_VEHICLE_ID){
-			printf("vehicle received...\n");
+			//printf("vehicle received...\n");
 			break;
 		}
 		else if (read_value > 0){
-			printf("South park vehicle with ID = %d", vehicle.id);
+			//printf("South park vehicle with ID = %d\n", vehicle.id);
 			if (pthread_create(&tSouth, NULL, v_controller, &vehicle) != 0)
 				perror("Error creating thread on South Pole of the park...\n\n");
 		}
@@ -154,7 +202,7 @@ void* south_entry(void* arg){
 
 	close(fd);
 
-	//unlink("fifoS");
+	unlink("fifoS");
 
 	return ret;
 }
@@ -168,22 +216,22 @@ void* east_entry(void* arg){
 
 	mkfifo("fifoE", 0660);
 
-	printf("Opening fifo...\n");
+	//printf("Opening fifo...\n");
 	if ((fd = open("fifoE", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
 	//avoids busy waiting
 	open("fifoE", O_WRONLY);
-	printf("Fifo opened\n");
+	//printf("Fifo opened\n");
 
 	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
 		if (vehicle.id == CONTROL_VEHICLE_ID){
-			printf("vehicle received...\n");
+			//printf("vehicle received...\n");
 			break;
 		}
 		else if (read_value > 0){
-			printf("East park vehicle with ID = %d", vehicle.id);
+			//printf("East park vehicle with ID = %d\n", vehicle.id);
 			if (pthread_create(&tEast, NULL, v_controller, &vehicle) != 0)
 				perror("Error creating thread on East Pole of the park...\n\n");
 		}
@@ -192,7 +240,7 @@ void* east_entry(void* arg){
 
 	close(fd);
 
-	//unlink("fifoE");
+	unlink("fifoE");
 
 	return ret;
 }
@@ -206,22 +254,22 @@ void* west_entry(void* arg){
 
 	mkfifo("fifoW", 0660);
 
-	printf("Opening fifo...\n");
+	//printf("Opening fifo...\n");
 	if ((fd = open("fifoW", O_RDONLY | O_NONBLOCK)) < 0)
 		perror("Error opening fifo for reading\n");
 
 	//avoids busy waiting
 	open("fifoW", O_WRONLY);
-	printf("Fifo opened\n");
+	//printf("Fifo opened\n");
 
 	while(1){
 		read_value = read(fd, &vehicle, sizeof(Vehicle));
 		if (vehicle.id == CONTROL_VEHICLE_ID){
-			printf("vehicle received...\n");
+			//printf("vehicle received...\n");
 			break;
 		}
 		else if (read_value > 0){
-			printf("West park vehicle with ID = %d", vehicle.id);
+			//printf("West park vehicle with ID = %d\n", vehicle.id);
 			if (pthread_create(&tWest, NULL, v_controller, &vehicle) != 0)
 				perror("Error creating thread on West Pole of the park...\n\n");
 		}
@@ -230,7 +278,7 @@ void* west_entry(void* arg){
 
 	close(fd);
 
-	//unlink("fifoW");
+	unlink("fifoW");
 
 	return ret;
 }
@@ -286,8 +334,17 @@ int main(int argc, char* argv[]){
 
 	pthread_t tNorth, tSouth, tEast, tWest;
 
+	FILE *f = fopen("parque.log", "w");
+	fclose(f);
+
+
+	par_fd = open("parque.log", O_WRONLY | O_CREAT, 0660);
+	char par_format[] = "Registo do parque:\nt(ticks) ; nlug ; id_viat ; observ\n";
+
+	write(par_fd, par_format, strlen(par_format));
+
 	unavailable = 0;
-	parkstate = PARK_OPEN;
+	//parkstate = PARK_OPEN;
 	state = PARK_OPEN;
 	printf("The park is now opened\n\n");
 
@@ -303,7 +360,7 @@ int main(int argc, char* argv[]){
 	sleep(open_time);
 
 	state = PARK_CLOSED;
-	parkstate = PARK_CLOSED;
+	//parkstate = PARK_CLOSED;
 	printf("The park is now closing\n\n");
 	close_park();
 	printf("The park is now closed\n\n");
@@ -322,14 +379,13 @@ int main(int argc, char* argv[]){
 	printf("Waiting for all the vehicles to leave the park...\n");	
 	while(unavailable != 0){}
 
-	unlink("fifoN");
-	unlink("fifoS");
-	unlink("fifoW");
-	unlink("fifoE");
 
 	printf("\nThe park is now empty.\n");
 	
+	close(par_fd);
+
 	pthread_mutex_destroy(&mutex);
+	pthread_mutex_destroy(&mutex_f);
 	pthread_exit(NULL);
 	return 0;
 }
