@@ -16,6 +16,7 @@
 #define PARK_FULL 2
 #define PARKING_VEHICLE 3
 #define ENTERING_VEHICLE 4
+#define LEAVING_VEHICLE 5
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -23,6 +24,7 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 float gen_time;
 float clock_ticks;
 int id = 0;
+int ger_fd;
 
 typedef enum {NORTH, SOUTH, EAST, WEST} Direction;
 
@@ -30,15 +32,65 @@ typedef struct{
 	int id;
 	float p_time;
 	char fifo[FIFO_LENGTH];
+	int ticks;
 	Direction dir;
 } Vehicle;
 
+void write_log(Vehicle *vehicle, int state){
+	char dest[2];
+	char line[200];
+	char obs[10];
+
+	switch(state){
+		case PARKING_VEHICLE:
+			strcpy(obs, "entrada");
+			break;
+		case LEAVING_VEHICLE:
+			strcpy(obs, "saida");
+			break;
+		case PARK_FULL:
+			strcpy(obs, "cheio");
+			break;
+		case PARK_CLOSED:
+			strcpy(obs, "fechado");
+			break;
+	}
+
+	switch(vehicle->dir){
+		case NORTH:
+			strcpy(dest, "N");
+			break;
+		case SOUTH:
+			strcpy(dest, "S");
+			break;
+		case EAST:
+			strcpy(dest, "E");
+			break;
+		case WEST:
+			strcpy(dest, "W");
+			break;
+	}
+
+	int t_vida = 0;
+
+	if (state == LEAVING_VEHICLE)
+		sprintf(line, "%8d ; %7d ; %8s ; %10d ; %6d ; %7s\n", vehicle->ticks, vehicle->id, dest, (int) vehicle->p_time, t_vida, obs);
+	else
+		sprintf(line, "%8d ; %7d ; %8s ; %10d ; %6s ; %7s\n", vehicle->ticks, vehicle->id, dest, (int) vehicle->p_time, "?", obs);
+
+	write(ger_fd, &line, strlen(line));
+	printf("Escreveu no log\n");
+
+	strcpy(line, "");
+
+}
 
 void* process_V(void* arg){
 	void* ret = NULL;
 	Vehicle vehicle = *(Vehicle*) arg;
 
-	int fdWrite;
+	int fdWrite, fdRead;
+	int state;
 
 	switch(vehicle.dir){
 		case NORTH:
@@ -62,10 +114,26 @@ void* process_V(void* arg){
 		write(fdWrite, &vehicle, sizeof(Vehicle));
 		printf("Vehicle%d added\n", vehicle.id);
 		close(fdWrite);
+
+		fdRead = open(vehicle.fifo, O_RDONLY);
+		if (fdRead != -1){
+			read(fdRead, &state, sizeof(int));
+			pthread_mutex_lock(&mutex);
+			write_log(&vehicle, state);
+			pthread_mutex_unlock(&mutex);
+		}
+		else; //park is closed
 	}
+	else
+		state = 2;
 
 
 	unlink(vehicle.fifo);
+
+	pthread_mutex_lock(&mutex);
+	write_log(&vehicle, state);
+	pthread_mutex_unlock(&mutex);
+
 
 	return ret;
 }
@@ -126,6 +194,13 @@ int main(int argc, char* argv[]){
 		exit(1);
 	}
 
+	ger_fd = open("gerador.log", O_WRONLY | O_CREAT, 0660);
+	char ger_format[] = "Registo do gerador:\nt(ticks) ; id_viat ; destin ; t_estacion ; t_vida ; observ\n";
+
+	pthread_mutex_lock(&mutex);
+	write(ger_fd, ger_format, strlen(ger_format));
+	pthread_mutex_unlock(&mutex);
+
 	srand(time(NULL));
 
 	gen_time = (float) atoi(argv[1]);
@@ -144,6 +219,8 @@ int main(int argc, char* argv[]){
 		usleep(clock_ticks * 1000);
 		tot_ticks--;
 	} while (tot_ticks > 0);
+
+	close(ger_fd);
 
 	pthread_exit(NULL);
 }

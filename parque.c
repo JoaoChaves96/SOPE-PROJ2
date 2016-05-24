@@ -16,6 +16,7 @@
 #define PARK_FULL 2
 #define PARKING_VEHICLE 3
 #define ENTERING_VEHICLE 4
+#define LEAVING_VEHICLE 5
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -45,7 +46,6 @@ void *v_controller(void* arg){
 	void* ret = NULL;
 	Vehicle vehicle = *(Vehicle*) arg;
 	int fd;
-	parkstate = ENTERING_VEHICLE;
 
 	fd = open(vehicle.fifo, O_WRONLY);
 
@@ -54,27 +54,31 @@ void *v_controller(void* arg){
 	printf("\n%d\n", unavailable);
 
 	if (unavailable < capacity && parkstate != PARK_CLOSED){
+		parkstate = PARKING_VEHICLE;
 		unavailable++;
+		write(fd, &parkstate, sizeof(int));
 		pthread_mutex_unlock(&mutex);
 		printf("\nNew vehicle in the park with id %d and parking time %d\n", vehicle.id, (int)vehicle.p_time);
-		parkstate = PARKING_VEHICLE;
 		usleep(vehicle.p_time * 1000);
 		unavailable--;
 		printf("the vehicle  with id %d left the park...\n", vehicle.id);
-		parkstate = 5;
+		parkstate = LEAVING_VEHICLE;
+		write(fd, &parkstate, sizeof(int));
 	}
 	else if(state == PARK_CLOSED){
 		pthread_mutex_unlock(&mutex);
 		printf("Cannot add vehicle! The park is closed\n\n");
 		parkstate = PARK_CLOSED;
+		write(fd, &parkstate, sizeof(int));
 	}
 	else{
 		pthread_mutex_unlock(&mutex);
 		parkstate = PARK_FULL;
+		write(fd, &parkstate, sizeof(int));
 		printf("The park is full!! \n");
 	}
 
-	write(fd, &parkstate, sizeof(int));	
+	//write(fd, &parkstate, sizeof(int));	
 
 	return ret;
 }
